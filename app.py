@@ -1,94 +1,109 @@
-import streamlit as st
+iimport streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# 모바일 UI 최적화
-st.set_page_config(
-    page_title="V6 Hybrid System",
-    page_icon="📈",
-    layout="centered"
-)
+# ---------------------------------------------------------
+# 1. 지표 계산 함수 (Wilder's RMA 적용)
+# ---------------------------------------------------------
+def calculate_indicators(symbol="TQQQ"):
+    # 200일 SMA 및 Wilder's RMA RSI 계산을 위해 2년 치 데이터 수집
+    ticker = yf.Ticker(symbol)
+    df = ticker.history(period="2y")
+    
+    if df.empty:
+        return None, None, None, None
 
-# 비밀번호 보안 로그인
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state["password_correct"] = False
+    # 데이터 구조 안전화 (Series 형태로 추출)
+    close = df['Close'].dropna()
+    
+    # TQQQ 최신 종가 및 전일 대비 변동률
+    latest_close = float(close.iloc[-1])
+    prev_close = float(close.iloc[-2])
+    change_pct = ((latest_close - prev_close) / prev_close) * 100
 
-    if not st.session_state["password_correct"]:
-        st.title("🔒 V6 System Access")
-        pwd = st.text_input("비밀번호를 입력하세요", type="password")
-        if st.button("로그인"):
-            if pwd == st.secrets["MY_PASSWORD"]:
-                st.session_state["password_correct"] = True
-                st.rerun()
-            else:
-                st.error("비밀번호가 틀렸습니다.")
-        return False
-    return True
+    # 1) 200일 이동평균선 (200 SMA)
+    sma200 = close.rolling(window=200).mean()
+    latest_sma200 = float(sma200.iloc[-1]) if not np.isnan(sma200.iloc[-1]) else None
 
-if check_password():
-    @st.cache_data(ttl=3600)
-    def load_tqqq_data():
-        df = yf.download("TQQQ", period="1y", interval="1d")
-        if isinstance(df.columns, pd.MultiIndex):
-            close = df['Close']['TQQQ']
-        else:
-            close = df['Close']
-            
-        df['SMA200'] = close.rolling(window=200).mean()
-        
-        delta = close.diff()
-        gain = (delta.where(delta > 0, 0))
-        loss = (-delta.where(delta < 0, 0))
-        avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
-        rs = avg_gain / avg_loss
-        df['RSI'] = 100 - (100 / (1 + rs))
-        
-        return df, float(close.iloc[-1]), float(df['SMA200'].iloc[-1]), float(df['RSI'].iloc[-1])
+    # 2) RSI 14 (Wilder's Smoothing / RMA 방식)
+    delta = close.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
 
-    try:
-        df, current_price, sma_200, current_rsi = load_tqqq_data()
-        avg_cost = 48.10
-        total_shares = 687
-        returns = ((current_price - avg_cost) / avg_cost) * 100
-        sma_margin = ((current_price - sma_200) / sma_200) * 100
+    # RMA calculation (alpha = 1 / N)
+    avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
 
-        st.title("🛡️ V6 Hybrid Dashboard")
-        st.caption("TQQQ Quantitative Portfolio Manager")
-        st.divider()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    latest_rsi = float(rsi.iloc[-1]) if not np.isnan(rsi.iloc[-1]) else None
 
-        # 메인 신호등
-        if current_price < sma_200:
-            st.error("🚨 [🔴 Risk-Off 대피 신호] 200일선 하향 이탈! 전량 매도 후 SGOV 피신")
-        elif current_rsi <= 30:
-            st.warning("⚡ [🟢 1단계 매수 신호] RSI 30 이하 과매도 진입! 탈출 시 SGOV 20% 집행")
-        elif returns >= 100:
-            st.info("🎯 [🔵 2단계 익절 타점] +100% 도달! 172주 매도 ➔ SPYM 스위칭")
-        else:
-            st.success("🟢 [HOLD] 정배열 강세장 유지 중 (신호 대기)")
+    return latest_close, change_pct, latest_sma200, latest_rsi
 
-        st.subheader("📊 실시간 퀀트 지표")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("TQQQ 종가", f"${current_price:.2f}", f"{returns:+.2f}%")
-            st.metric("일봉 RSI (14)", f"{current_rsi:.2f}", "RMA Wilder's")
-        with col2:
-            st.metric("200일선 (SMA)", f"${sma_200:.2f}", f"{sma_margin:+.2f}% (버퍼)")
-            st.metric("보유 수량", f"{total_shares} 주", f"평단 ${avg_cost:.2f}")
+# ---------------------------------------------------------
+# 2. 대시보드 UI 연동
+# ---------------------------------------------------------
+st.title("🛡️ V6 Hybrid Dashboard")
+st.caption("TQQQ Quantitative Portfolio Manager")
 
-        st.divider()
+# 데이터 로딩
+latest_close, change_pct, sma200, rsi14 = calculate_indicators("TQQQ")
 
-        # 익절 트래커
-        target_price_100 = avg_cost * 2.0
-        progress = min(max(returns / 100.0, 0.0), 1.0)
-        st.subheader("🎯 +100% 익절 타점 트래커 ($96.20)")
-        st.progress(progress)
-        st.write(f"현재 달성도: **{returns:.1f}% / 100.0%** (잔여 격차: **${target_price_100 - current_price:.2f}**)")
+# 보유 계좌 예시 데이터 (사용자 설정값)
+avg_price = 48.10
+holding_qty = 687
+target_profit_price = avg_price * 2.0  # +100% 익절 타점 ($96.20)
 
-        st.divider()
-        st.caption("※ TradingView 일봉 D 기준 및 RMA Wilder's 로직 적용")
+if latest_close is not None and sma200 is not None and rsi14 is not None:
+    
+    # 200일선 대비 버퍼 (%)
+    sma_buffer = ((latest_close - sma200) / sma200) * 100
+    
+    # [상태 바]
+    if latest_close >= sma200:
+        st.success("🟢 [HOLD] 정배열 강세장 유지 중 (신호 대기)")
+    else:
+        st.error("🚨 [ALERT] 200일선 하향 이탈! 전량 매도 및 SGOV 대피 조건")
 
-    except Exception as e:
-        st.error(f"데이터 로딩 실패: {e}")
+    st.subheader("📊 실시간 퀀트 지표")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+            label="TQQQ 종가", 
+            value=f"${latest_close:.2f}", 
+            delta=f"{change_pct:+.2f}%"
+        )
+        st.metric(
+            label="일봉 RSI (14)", 
+            value=f"{rsi14:.2f}", 
+            delta="RMA Wilder's"
+        )
+
+    with col2:
+        st.metric(
+            label="200일선 (SMA)", 
+            value=f"${sma200:.2f}", 
+            delta=f"{sma_buffer:+.2f}% (버퍼)"
+        )
+        st.metric(
+            label="보유 수량", 
+            value=f"{holding_qty:,} 주", 
+            delta=f"평단 ${avg_price:.2f}"
+        )
+
+    st.divider()
+
+    # +100% 익절 타점 트래커
+    st.subheader(f"🎯 +100% 익절 타점 트래커 (${target_profit_price:.2f})")
+    
+    # 프로그레스 바 계산 (NaN 및 범위 초과 0.0~1.0 안전 보장)
+    progress_val = (latest_close - avg_price) / (target_profit_price - avg_price)
+    progress_val = max(0.0, min(1.0, progress_val))  # 0~1 사이로 제한
+
+    st.progress(progress_val)
+    st.caption(f"목표가 진척도: {progress_val * 100:.1f}% 달성")
+
+else:
+    st.error("데이터 수집 실패: Yahoo Finance 서버 통신 상태를 확인하거나 잠시 후 다시 시도하세요.")
