@@ -2,4 +2,6 @@ streamlit
 yfinance
 pandas
 numpy
-streamlit-gsheets-connection
+st-gsheets-connection
+gspread
+google-auth
