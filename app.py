@@ -250,13 +250,21 @@ with sig_col3:
 st.divider()
 
 # ---------------------------------------------------------
-# 📝 매매 체크리스트 & 구글 시트 동기화
+# 📝 매매 체크리스트 & 구글 시트 동기화 (200일선 대피 보완)
 # ---------------------------------------------------------
 st.subheader("📝 V6 매매 실행 체크리스트 (구글 시트 동기화)")
+
+# 구글 시트에 sell_200sma 열이 없을 경우를 대비한 안전 체크
+sell_200sma_val = bool(df_current.loc[0, "sell_200sma"]) if "sell_200sma" in df_current.columns else False
 
 with st.form("checklist_form"):
     st.write("실제로 매매를 완료하셨다면 아래 항목을 체크하고 [구글 시트에 저장]을 눌러주세요.")
     
+    # 리스크 관리 대피 경고 영역 (최상단 강조)
+    st.markdown("##### 🚨 **위험 관리 (리스크 모드)**")
+    chk_s200sma = st.checkbox("🚨 **TQQQ 200일선 하향 이탈 (전량 매도 ➔ SGOV 대피 완료)**", value=sell_200sma_val)
+    st.divider()
+
     c1, c2, c3 = st.columns(3)
     
     with c1:
@@ -266,7 +274,7 @@ with st.form("checklist_form"):
         chk_b3 = st.checkbox("3단계 매수 완료 (50%)", value=bool(df_current.loc[0, "buy_3"]))
 
     with c2:
-        st.markdown("**[익절 실행 -> SPYM 매수]**")
+        st.markdown("**[익절 실행 ➔ SPYM 매수]**")
         chk_s50 = st.checkbox("+50% 달성 익절 (10%)", value=bool(df_current.loc[0, "sell_50"]))
         chk_s100 = st.checkbox("+100% 달성 익절 (15%)", value=bool(df_current.loc[0, "sell_100"]))
         chk_s150 = st.checkbox("+150% 달성 익절 (15%)", value=bool(df_current.loc[0, "sell_150"]))
@@ -285,6 +293,7 @@ if submit_btn:
         "qty": input_qty,
         "avg_price": input_avg,
         "buy_1": chk_b1, "buy_2": chk_b2, "buy_3": chk_b3,
+        "sell_200sma": chk_s200sma,
         "sell_50": chk_s50, "sell_100": chk_s100, "sell_150": chk_s150, "sell_200": chk_s200,
         "sell_dead": chk_sdead, "sell_rsi80": chk_srsi80, "sell_ath": chk_sath
     }])
