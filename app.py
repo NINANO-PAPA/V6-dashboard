@@ -146,34 +146,55 @@ else:
     st.success("🟢 [HOLD] TQQQ가 200일선 위 정배열 강세장을 유지 중입니다.")
 
 # ---------------------------------------------------------
-# 📊 실시간 퀀트 지표 (TQQQ & QQQ 이원화)
+# 📊 실시간 퀀트 지표 (시인성 극대화 3단계 레이아웃)
 # ---------------------------------------------------------
 st.subheader("📊 실시간 퀀트 지표")
 
-col1, col2, col3, col4 = st.columns(4)
-
-# 1) TQQQ 정보
-with col1:
-    st.metric("TQQQ 현재가", f"${market_data['tqqq_close']:.2f}")
-    st.caption(f"200일선: ${market_data['tqqq_200sma']:.2f}")
-
-# 2) QQQ 정보 (추가됨)
-with col2:
-    st.metric("QQQ 현재가", f"${market_data['qqq_close']:.2f}")
-    st.caption(f"5일선: ${market_data['qqq_5sma']:.2f} | 20일선: ${market_data['qqq_20sma']:.2f}")
-
-# 3) TQQQ RSI & 200일선 버퍼
-with col3:
+# [그룹 1] TQQQ 지표 (매수/대피 핵심 기준)
+st.markdown("### 🔹 TQQQ 지표 (매수/대피 기준)")
+t1, t2, t3 = st.columns(3)
+with t1:
+    st.metric(label="TQQQ 현재가", value=f"${market_data['tqqq_close']:.2f}")
+with t2:
+    st.metric(label="TQQQ 일봉 RSI (14)", value=f"{market_data['tqqq_rsi']:.2f}")
+with t3:
     buffer_pct = ((market_data['tqqq_close'] - market_data['tqqq_200sma']) / market_data['tqqq_200sma']) * 100
-    st.metric("TQQQ 일봉 RSI (14)", f"{market_data['tqqq_rsi']:.2f}")
-    st.caption(f"200일선 버퍼: {buffer_pct:+.2f}%")
+    st.metric(
+        label="200일선 (SMA)", 
+        value=f"${market_data['tqqq_200sma']:.2f}", 
+        delta=f"{buffer_pct:+.2f}% 버퍼"
+    )
 
-# 4) 계좌 평가
-with col4:
+st.divider()
+
+# [그룹 2] QQQ 지표 (골든/데드크로스 판단 기준)
+st.markdown("### 🔸 QQQ 지표 (이평선 추세 기준)")
+q1, q2, q3 = st.columns(3)
+with q1:
+    st.metric(label="QQQ 현재가", value=f"${market_data['qqq_close']:.2f}")
+with q2:
+    st.metric(label="QQQ 5일선 (SMA)", value=f"${market_data['qqq_5sma']:.2f}")
+with q3:
+    diff_sma = market_data['qqq_5sma'] - market_data['qqq_20sma']
+    st.metric(
+        label="QQQ 20일선 (SMA)", 
+        value=f"${market_data['qqq_20sma']:.2f}",
+        delta=f"5일-20일 이격: ${diff_sma:+.2f}"
+    )
+
+st.divider()
+
+# [그룹 3] 내 포트폴리오 현황
+st.markdown("### 💼 내 계좌 현황")
+p1, p2, p3 = st.columns(3)
+with p1:
     total_val = input_qty * market_data['tqqq_close']
+    st.metric(label="보유 자산 평가액", value=f"${total_val:,.2f}")
+with p2:
     profit_pct = ((market_data['tqqq_close'] - input_avg) / input_avg) * 100
-    st.metric("보유 자산 평가액", f"${total_val:,.2f}")
-    st.caption(f"수익률: {profit_pct:+.2f}% (평단 ${input_avg:.2f})")
+    st.metric(label="수익률", value=f"{profit_pct:+.2f}%")
+with p3:
+    st.metric(label="매수 평단가", value=f"${input_avg:.2f}", delta=f"보유 수량: {input_qty:,}주", delta_color="off")
 
 st.divider()
 
