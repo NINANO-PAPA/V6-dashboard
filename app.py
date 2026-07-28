@@ -153,7 +153,7 @@ if latest_close is not None and sma200 is not None and rsi14 is not None:
     st.subheader("🚦 V6 전략 실시간 시그널 현황")
     st.caption("현재 실시간 수치를 분석하여 조건 포착 시 초록불(🟢), 미달성 시 빨간불(🔴)로 표시됩니다.")
 
-    sig_col1, sig_col2 = sig_col3 = st.columns(3)
+    sig_col1, sig_col2, sig_col3 = st.columns(3)
 
     # 매수 시그널 상태
     with sig_col1:
