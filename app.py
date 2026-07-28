@@ -29,21 +29,26 @@ if not check_password():
     st.stop()
 
 # ---------------------------------------------------------
-# 2. 데이터 수집 함수 (yfinance: TQQQ + QQQ)
+# 2. 데이터 수집 함수 (yfinance: TQQQ + QQQ 각각 안전 호출)
 # ---------------------------------------------------------
 @st.cache_data(ttl=300)
 def fetch_market_data():
-    # TQQQ 및 QQQ 동시 데이터 수집
-    tickers = yf.Tickers("TQQQ QQQ")
+    # TQQQ 및 QQQ 단일 티커 호출 (안정성 확보)
+    tqqq_obj = yf.Ticker("TQQQ")
+    qqq_obj = yf.Ticker("QQQ")
     
-    # TQQQ 히스토리 (200일선, RSI 계산용)
-    df_tqqq = tickers.tickers['TQQQ'].history(period="1y")
-    # QQQ 히스토리 (5일/20일 이평선, 골든/데드크로스 계산용)
-    df_qqq = tickers.tickers['QQQ'].history(period="6m")
+    # 히스토리 데이터 다운로드
+    df_tqqq = tqqq_obj.history(period="1y")
+    df_qqq = qqq_obj.history(period="6m")
+
+    # 데이터 수집 실패 시 예외 처리 (방어 코드)
+    if df_tqqq.empty or df_qqq.empty:
+        st.error("yfinance 데이터 수집에 실패했습니다. 잠시 후 다시 시도해주세요.")
+        st.stop()
 
     # [TQQQ 지표 계산]
-    tqqq_close = df_tqqq['Close'].iloc[-1]
-    tqqq_200sma = df_tqqq['Close'].rolling(window=200).mean().iloc[-1]
+    tqqq_close = float(df_tqqq['Close'].iloc[-1])
+    tqqq_200sma = float(df_tqqq['Close'].rolling(window=200).mean().iloc[-1])
     
     # TQQQ RSI(14) 계산 (RMA Wilder's 방식)
     delta = df_tqqq['Close'].diff()
@@ -52,20 +57,20 @@ def fetch_market_data():
     avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
     rs = avg_gain / avg_loss
-    tqqq_rsi = (100 - (100 / (1 + rs))).iloc[-1]
+    tqqq_rsi = float((100 - (100 / (1 + rs))).iloc[-1])
 
     # [QQQ 지표 계산]
-    qqq_close = df_qqq['Close'].iloc[-1]
-    qqq_5sma = df_qqq['Close'].rolling(window=5).mean().iloc[-1]
-    qqq_20sma = df_qqq['Close'].rolling(window=20).mean().iloc[-1]
+    qqq_close = float(df_qqq['Close'].iloc[-1])
+    qqq_5sma = float(df_qqq['Close'].rolling(window=5).mean().iloc[-1])
+    qqq_20sma = float(df_qqq['Close'].rolling(window=20).mean().iloc[-1])
     
     # QQQ 이전 날짜 이평선 (크로스 발생 여부 확인용)
-    qqq_5sma_prev = df_qqq['Close'].rolling(window=5).mean().iloc[-2]
-    qqq_20sma_prev = df_qqq['Close'].rolling(window=20).mean().iloc[-2]
+    qqq_5sma_prev = float(df_qqq['Close'].rolling(window=5).mean().iloc[-2])
+    qqq_20sma_prev = float(df_qqq['Close'].rolling(window=20).mean().iloc[-2])
 
     # QQQ 기준 골든크로스 / 데드크로스 판정
-    is_golden_cross = (qqq_5sma_prev <= qqq_20sma_prev) and (qqq_5sma > qqq_20sma)
-    is_dead_cross = (qqq_5sma_prev >= qqq_20sma_prev) and (qqq_5sma < qqq_20sma)
+    is_golden_cross = bool((qqq_5sma_prev <= qqq_20sma_prev) and (qqq_5sma > qqq_20sma))
+    is_dead_cross = bool((qqq_5sma_prev >= qqq_20sma_prev) and (qqq_5sma < qqq_20sma))
 
     return {
         "tqqq_close": tqqq_close,
