@@ -199,54 +199,53 @@ with p3:
 st.divider()
 
 # ---------------------------------------------------------
-# 🚦 V6 전략 실시간 시그널 현황
+# 🚦 V6 전략 실시간 시그널 현황 (분류 정밀화)
 # ---------------------------------------------------------
 st.subheader("🚦 V6 전략 실시간 시그널 현황")
 st.caption("시장 데이터를 실시간 분석하여 조건 포착 시 초록불(🟢), 미달성 시 빨간불(🔴)로 표시됩니다.")
 
-sig_col1, sig_col2, sig_col3 = st.columns(3)
+s1, s2, s3 = st.columns(3)
 
-# 1) 매수 시그널
-with sig_col1:
-    st.markdown("#### 🛒 매수 조건 (분할 진입)")
+with s1:
+    st.markdown("### 🛒 매수 조건 (진입)")
+    # 1단계: RSI 반등
+    rsi_signal = "🟢 활성" if market_data['tqqq_rsi'] <= 35 else "🔴 비활성"
+    st.write(f"• **1단계 (RSI 반등 구간)**: {rsi_signal}")
     
-    # 1단계: TQQQ RSI
-    b1_status = "🟢 활성 (RSI 35 이하 탈출)" if market_data["tqqq_rsi"] <= 35 else "🔴 비활성"
-    # 2단계: QQQ 기준 골든크로스
-    b2_status = "🟢 활성 (QQQ 5/20일 골든크로스)" if market_data["is_golden_cross"] else "🔴 비활성"
-    # 3단계: TQQQ 200일선
-    b3_status = "🟢 활성 (TQQQ 200일선 위)" if not is_danger else "🔴 비활성 (200일선 밑)"
-
-    st.write(f"• **1단계 (RSI 반등)**: {b1_status}")
-    st.write(f"• **2단계 (QQQ 골든크로스)**: {b2_status}")
-    st.write(f"• **3단계 (TQQQ 200일선 돌파)**: {b3_status}")
-
-# 2) 리스크 및 대피 시그널
-with sig_col2:
-    st.markdown("#### 🚨 위험 관리 (대피/데드크로스)")
+    # 2단계: QQQ 골든크로스
+    gc_signal = "🟢 발생" if market_data['is_golden_cross'] else "🔴 비활성"
+    st.write(f"• **2단계 (QQQ 골든크로스)**: {gc_signal}")
     
-    risk_status = "🚨 **경고! TQQQ 200일선 이탈 (SGOV 전량 대피)**" if is_danger else "🟢 **안전 (TQQQ 200일선 위)**"
-    dead_status = "🚨 **QQQ 5일/20일 데드크로스 발생!**" if market_data["is_dead_cross"] else "🟢 **정상 (QQQ 이평선 정배열/유지)**"
+    # 3단계: TQQQ 200일선 돌파
+    sma200_buy = "🟢 활성 (200일선 위)" if market_data['tqqq_close'] > market_data['tqqq_200sma'] else "🔴 비활성"
+    st.write(f"• **3단계 (TQQQ 200일선 위)**: {sma200_buy}")
+
+with s2:
+    st.markdown("### 🚨 위험 관리 (대피)")
+    # 200일선 하향 이탈 여부 (대피 조건)
+    if market_data['tqqq_close'] < market_data['tqqq_200sma']:
+        st.write("• **200일선 대피**: 🔴 **경고 (200일선 하향 이탈 ➔ SGOV 전량 대피)**")
+    else:
+        st.write("• **200일선 대피**: 🟢 **안전 (TQQQ 200일선 유지 중)**")
+
+with s3:
+    st.markdown("### 🎯 익절 조건 (SPYM 전환)")
     
-    st.write(f"• **200일선 대피**: {risk_status}")
-    st.write(f"• **QQQ 데드크로스**: {dead_status}")
-
-# 3) 익절 및 리밸런싱 시그널
-with sig_col3:
-    st.markdown("#### 🎯 익절 조건 (SPYM 전환)")
+    # 수익률 계산
+    profit_pct = ((market_data['tqqq_close'] - input_avg) / input_avg) * 100 if input_avg > 0 else 0
     
-    s50 = "🟢 달성 (+50%)" if profit_pct >= 50 else "🔴 미달성"
-    s100 = "🟢 달성 (+100%)" if profit_pct >= 100 else "🔴 미달성"
-    s150 = "🟢 달성 (+150%)" if profit_pct >= 150 else "🔴 미달성"
-    s200 = "🟢 달성 (+200%)" if profit_pct >= 200 else "🔴 미달성"
-    srsi80 = "🟢 과열 (TQQQ RSI 80 이상)" if market_data["tqqq_rsi"] >= 80 else "🔴 미달성"
-
-    st.write(f"• **수익률 +50%**: {s50}")
-    st.write(f"• **수익률 +100%**: {s100}")
-    st.write(f"• **수익률 +150%**: {s150}")
-    st.write(f"• **수익률 +200%**: {s200}")
-    st.write(f"• **TQQQ RSI 80 이상**: {srsi80}")
-
+    st.write(f"• **수익률 +50%**: {'🟢 달성' if profit_pct >= 50 else '🔴 미달성'}")
+    st.write(f"• **수익률 +100%**: {'🟢 달성' if profit_pct >= 100 else '🔴 미달성'}")
+    st.write(f"• **수익률 +150%**: {'🟢 달성' if profit_pct >= 150 else '🔴 미달성'}")
+    st.write(f"• **수익률 +200%**: {'🟢 달성' if profit_pct >= 200 else '🔴 미달성'}")
+    
+    # QQQ 데드크로스 (단기 조정 시 15% 익절)
+    dc_signal = "🟢 발생 (15% 매도 ➔ SPYM)" if market_data['is_dead_cross'] else "🔴 미발생"
+    st.write(f"• **QQQ 데드크로스**: {dc_signal}")
+    
+    # RSI 과열 익절
+    rsi80_signal = "🟢 과열 (20% 매도 ➔ SPYM)" if market_data['tqqq_rsi'] >= 80 else "🔴 미달성"
+    st.write(f"• **TQQQ RSI 80 이상**: {rsi80_signal}")
 st.divider()
 
 # ---------------------------------------------------------
