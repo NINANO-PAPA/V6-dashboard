@@ -29,12 +29,12 @@ if not check_password():
     st.stop()
 
 # ---------------------------------------------------------
-# 2. 데이터 수집 함수 (yf.download 사용으로 안정성 강화)
+# 2. 데이터 수집 함수 (QQQ 20일/50일선 크로스 적용)
 # ---------------------------------------------------------
 @st.cache_data(ttl=300)
 def fetch_market_data():
     try:
-        # yf.download를 사용하여 TQQQ와 QQQ 데이터를 한 번에 안정적으로 수집
+        # yf.download로 TQQQ와 QQQ 데이터 수집 (50일선 계산을 위해 period='1y' 설정)
         data = yf.download(
             tickers=["TQQQ", "QQQ"],
             period="1y",
@@ -44,7 +44,6 @@ def fetch_market_data():
             progress=False
         )
 
-        # 데이터 존재 여부 검증
         if data.empty or "TQQQ" not in data or "QQQ" not in data:
             st.warning("⚠️ 야후 파이낸스 응답 대기 중입니다. 잠시 후 [Refresh] 버튼을 눌러주세요.")
             st.stop()
@@ -52,8 +51,8 @@ def fetch_market_data():
         df_tqqq = data["TQQQ"].dropna()
         df_qqq = data["QQQ"].dropna()
 
-        if len(df_tqqq) < 200 or len(df_qqq) < 20:
-            st.warning("⚠️ 최소 필요 데이터 건수가 부족합니다.")
+        if len(df_tqqq) < 200 or len(df_qqq) < 50:
+            st.warning("⚠️ 최소 필요 데이터 건수가 부족합니다. (QQQ 최소 50일 필요)")
             st.stop()
 
         # [TQQQ 지표 계산]
@@ -69,26 +68,26 @@ def fetch_market_data():
         rs = avg_gain / avg_loss
         tqqq_rsi = float((100 - (100 / (1 + rs))).iloc[-1])
 
-        # [QQQ 지표 계산]
+        # [QQQ 지표 계산: 20일선 & 50일선]
         qqq_close = float(df_qqq['Close'].iloc[-1])
-        qqq_5sma = float(df_qqq['Close'].rolling(window=5).mean().iloc[-1])
         qqq_20sma = float(df_qqq['Close'].rolling(window=20).mean().iloc[-1])
+        qqq_50sma = float(df_qqq['Close'].rolling(window=50).mean().iloc[-1])
         
         # QQQ 이전 날짜 이평선 (크로스 발생 여부 확인용)
-        qqq_5sma_prev = float(df_qqq['Close'].rolling(window=5).mean().iloc[-2])
         qqq_20sma_prev = float(df_qqq['Close'].rolling(window=20).mean().iloc[-2])
+        qqq_50sma_prev = float(df_qqq['Close'].rolling(window=50).mean().iloc[-2])
 
-        # QQQ 기준 골든크로스 / 데드크로스 판정
-        is_golden_cross = bool((qqq_5sma_prev <= qqq_20sma_prev) and (qqq_5sma > qqq_20sma))
-        is_dead_cross = bool((qqq_5sma_prev >= qqq_20sma_prev) and (qqq_5sma < qqq_20sma))
+        # QQQ 20일/50일 기준 골든크로스 / 데드크로스 판정
+        is_golden_cross = bool((qqq_20sma_prev <= qqq_50sma_prev) and (qqq_20sma > qqq_50sma))
+        is_dead_cross = bool((qqq_20sma_prev >= qqq_50sma_prev) and (qqq_20sma < qqq_50sma))
 
         return {
             "tqqq_close": tqqq_close,
             "tqqq_200sma": tqqq_200sma,
             "tqqq_rsi": tqqq_rsi,
             "qqq_close": qqq_close,
-            "qqq_5sma": qqq_5sma,
             "qqq_20sma": qqq_20sma,
+            "qqq_50sma": qqq_50sma,
             "is_golden_cross": is_golden_cross,
             "is_dead_cross": is_dead_cross
         }
@@ -167,19 +166,19 @@ with t3:
 
 st.divider()
 
-# [그룹 2] QQQ 지표 (골든/데드크로스 판단 기준)
+# [그룹 2] QQQ 지표 (20일선 & 50일선 추세 기준)
 st.markdown("### 🔸 QQQ 지표 (이평선 추세 기준)")
 q1, q2, q3 = st.columns(3)
 with q1:
     st.metric(label="QQQ 현재가", value=f"${market_data['qqq_close']:.2f}")
 with q2:
-    st.metric(label="QQQ 5일선 (SMA)", value=f"${market_data['qqq_5sma']:.2f}")
+    st.metric(label="QQQ 20일선 (SMA)", value=f"${market_data['qqq_20sma']:.2f}")
 with q3:
-    diff_sma = market_data['qqq_5sma'] - market_data['qqq_20sma']
+    diff_sma = market_data['qqq_20sma'] - market_data['qqq_50sma']
     st.metric(
-        label="QQQ 20일선 (SMA)", 
-        value=f"${market_data['qqq_20sma']:.2f}",
-        delta=f"5일-20일 이격: ${diff_sma:+.2f}"
+        label="QQQ 50일선 (SMA)", 
+        value=f"${market_data['qqq_50sma']:.2f}",
+        delta=f"20일-50일 이격: ${diff_sma:+.2f}"
     )
 
 st.divider()
@@ -199,7 +198,7 @@ with p3:
 st.divider()
 
 # ---------------------------------------------------------
-# 🚦 V6 전략 실시간 시그널 현황 (분류 정밀화)
+# 🚦 V6 전략 실시간 시그널 현황 (20일/50일선 기준)
 # ---------------------------------------------------------
 st.subheader("🚦 V6 전략 실시간 시그널 현황")
 st.caption("시장 데이터를 실시간 분석하여 조건 포착 시 초록불(🟢), 미달성 시 빨간불(🔴)로 표시됩니다.")
@@ -208,21 +207,18 @@ s1, s2, s3 = st.columns(3)
 
 with s1:
     st.markdown("### 🛒 매수 조건 (진입)")
-    # 1단계: RSI 반등
     rsi_signal = "🟢 활성" if market_data['tqqq_rsi'] <= 35 else "🔴 비활성"
     st.write(f"• **1단계 (RSI 반등 구간)**: {rsi_signal}")
     
-    # 2단계: QQQ 골든크로스
-    gc_signal = "🟢 발생" if market_data['is_golden_cross'] else "🔴 비활성"
+    # 2단계: QQQ 20일/50일 골든크로스
+    gc_signal = "🟢 발생 (20일>50일 돌파)" if market_data['is_golden_cross'] else "🔴 비활성"
     st.write(f"• **2단계 (QQQ 골든크로스)**: {gc_signal}")
     
-    # 3단계: TQQQ 200일선 돌파
     sma200_buy = "🟢 활성 (200일선 위)" if market_data['tqqq_close'] > market_data['tqqq_200sma'] else "🔴 비활성"
     st.write(f"• **3단계 (TQQQ 200일선 위)**: {sma200_buy}")
 
 with s2:
     st.markdown("### 🚨 위험 관리 (대피)")
-    # 200일선 하향 이탈 여부 (대피 조건)
     if market_data['tqqq_close'] < market_data['tqqq_200sma']:
         st.write("• **200일선 대피**: 🔴 **경고 (200일선 하향 이탈 ➔ SGOV 전량 대피)**")
     else:
@@ -230,8 +226,6 @@ with s2:
 
 with s3:
     st.markdown("### 🎯 익절 조건 (SPYM 전환)")
-    
-    # 수익률 계산
     profit_pct = ((market_data['tqqq_close'] - input_avg) / input_avg) * 100 if input_avg > 0 else 0
     
     st.write(f"• **수익률 +50%**: {'🟢 달성' if profit_pct >= 50 else '🔴 미달성'}")
@@ -239,11 +233,10 @@ with s3:
     st.write(f"• **수익률 +150%**: {'🟢 달성' if profit_pct >= 150 else '🔴 미달성'}")
     st.write(f"• **수익률 +200%**: {'🟢 달성' if profit_pct >= 200 else '🔴 미달성'}")
     
-    # QQQ 데드크로스 (단기 조정 시 15% 익절)
+    # QQQ 20일/50일 데드크로스 (중기 조정 시 15% 익절)
     dc_signal = "🟢 발생 (15% 매도 ➔ SPYM)" if market_data['is_dead_cross'] else "🔴 미발생"
-    st.write(f"• **QQQ 데드크로스**: {dc_signal}")
+    st.write(f"• **QQQ 데드크로스 (20/50일)**: {dc_signal}")
     
-    # RSI 과열 익절
     rsi80_signal = "🟢 과열 (20% 매도 ➔ SPYM)" if market_data['tqqq_rsi'] >= 80 else "🔴 미달성"
     st.write(f"• **TQQQ RSI 80 이상**: {rsi80_signal}")
 st.divider()
